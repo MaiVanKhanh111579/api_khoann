@@ -1,72 +1,143 @@
-const express = require('express');
-const fs = require('fs');
-const cors = require('cors');
+const express = require("express"); 
 
-const app = express();
+const fs = require("fs"); 
 
-// Cho phép JSON lớn hơn 100kb (fix lỗi 500)
-app.use(express.json({ limit: '10mb' }));
-app.use(cors());
+const cors = require("cors"); 
 
-// =============================
-// DỮ LIỆU PHÂN MẢNH KHOA_NN
-// =============================
-const FILE = 'data_khoann.json';
+ 
 
-// Nếu chưa có file thì tạo trống cho tất cả bảng
-if (!fs.existsSync(FILE)) {
-  const emptyData = { sinhvien: [], lop: [], dangky: [] };
-  fs.writeFileSync(FILE, JSON.stringify(emptyData, null, 2));
-}
+const app = express(); 
 
-// Route kiểm tra server
-app.get('/', (req, res) => {
-  res.send('API Khoa_NN is running!');
-});
+app.use(express.json()); 
 
-// API nhận dữ liệu phân mảnh (từ máy chủ gửi xuống)
-app.post('/api/khoa_nn', (req, res) => {
-  try {
-    const inputData = req.body; // object có nhiều bảng
-    const currentData = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+app.use(cors()); 
 
-    // Lặp qua tất cả key trong object gửi tới
-    Object.keys(inputData).forEach(table => {
-      const newRows = inputData[table] || [];
-      const oldRows = currentData[table] || [];
+ 
 
-      // UPSERT: cập nhật nếu đã tồn tại, thêm nếu chưa có
-      let updatedRows = oldRows;
-      newRows.forEach(row => {
-        let idx = -1;
-        if (table === 'sinhvien') idx = oldRows.findIndex(x => x.MaSV === row.MaSV);
-        else if (table === 'lop') idx = oldRows.findIndex(x => x.MaLop === row.MaLop);
-        else if (table === 'dangky') idx = oldRows.findIndex(x => x.MaSV === row.MaSV && x.MaMH === row.MaMH);
+// ============================= 
 
-        if (idx >= 0) updatedRows[idx] = row;
-        else updatedRows.push(row);
-      });
+// DỮ LIỆU PHÂN MẢNH KHOA_NN 
 
-      currentData[table] = updatedRows;
-    });
+// ============================= 
 
-    // Ghi dữ liệu mới vào file
-    fs.writeFileSync(FILE, JSON.stringify(currentData, null, 2));
-    res.json({ message: '✅ Đã nhận dữ liệu', received: inputData });
-  } catch (err) {
-    console.error('❌ Lỗi xử lý API:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
+ 
 
-// API GET hiển thị tất cả bảng
-app.get('/api/khoa_nn', (req, res) => {
-  const data = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-  res.json(data); // trả về object nhiều bảng
-});
+// ✅ Render không cho ghi ngoài /tmp, nên phải lưu ở đây 
 
-// Khởi động server, dùng PORT do Render cấp
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`API Khoa_NN chạy tại cổng ${PORT}`);
-});
+const FILE = "/tmp/data_khoann.json"; 
+
+ 
+
+// Nếu chưa có file thì tạo rỗng 
+
+if (!fs.existsSync(FILE)) { 
+
+  fs.writeFileSync(FILE, JSON.stringify({ sinhvien: [] }, null, 2)); 
+
+  console.log("📁 Tạo file trống ban đầu tại", FILE); 
+
+} 
+
+ 
+
+// Route kiểm tra server 
+
+app.get("/", (req, res) => { 
+
+  res.send("✅ API Khoa_NN is running on Render!"); 
+
+}); 
+
+ 
+
+// API nhận dữ liệu phân mảnh (từ máy chủ gửi xuống) 
+
+app.post("/api/khoa_nn", (req, res) => { 
+
+  try { 
+
+    console.log("📥 Nhận dữ liệu từ client..."); 
+
+    const newData = req.body.sinhvien || req.body || []; 
+
+    const current = fs.existsSync(FILE) 
+
+      ? JSON.parse(fs.readFileSync(FILE, "utf8")).sinhvien || [] 
+
+      : []; 
+
+ 
+
+    // UPSERT: thêm mới hoặc cập nhật nếu đã tồn tại 
+
+    newData.forEach((sv) => { 
+
+      const idx = current.findIndex((x) => x.MaSV === sv.MaSV); 
+
+      if (idx >= 0) current[idx] = sv; 
+
+      else current.push(sv); 
+
+    }); 
+
+ 
+
+    // Ghi lại file 
+
+    fs.writeFileSync(FILE, JSON.stringify({ sinhvien: current }, null, 2)); 
+
+    console.log(`✅ Đã cập nhật ${newData.length} sinh viên.`); 
+
+ 
+
+    res.json({ 
+
+      message: "Đã nhận dữ liệu Khoa_NN", 
+
+      count: newData.length, 
+
+    }); 
+
+  } catch (err) { 
+
+    console.error("❌ Lỗi khi xử lý dữ liệu:", err); 
+
+    res.status(500).json({ error: err.message }); 
+
+  } 
+
+}); 
+
+ 
+
+// API xem dữ liệu hiện tại 
+
+app.get("/api/khoa_nn", (req, res) => { 
+
+  try { 
+
+    const data = fs.existsSync(FILE) 
+
+      ? JSON.parse(fs.readFileSync(FILE, "utf8")) 
+
+      : { sinhvien: [] }; 
+
+    res.json(data.sinhvien); 
+
+  } catch (err) { 
+
+    res.status(500).json({ error: err.message }); 
+
+  } 
+
+}); 
+
+ 
+
+const PORT = process.env.PORT || 10000; // vẫn fallback 10000 nếu chạy local 
+
+app.listen(PORT, () => { 
+
+  console.log(`🚀 API Khoa_NN đang chạy tại cổng ${PORT}`); 
+
+}); 
